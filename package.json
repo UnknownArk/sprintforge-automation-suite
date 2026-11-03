@@ -1,0 +1,30 @@
+{
+  "name": "sprintforge-automation-suite",
+  "version": "1.0.0",
+  "description": "End-to-End and API test automation suite for SprintForge",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:e2e": "playwright test tests/e2e",
+    "test:api": "playwright test tests/api",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report"
+  },
+  "keywords": [
+    "playwright",
+    "sdet",
+    "typescript",
+    "automation",
+    "api-testing"
+  ],
+  "author": "Pradnesh R",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.50.1",
+    "@types/node": "^22.0.0",
+    "dotenv": "^16.4.7",
+    "typescript": "^5.7.0",
+    "zod": "^3.24.1"
+  }
+}
