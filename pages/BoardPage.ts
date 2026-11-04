@@ -96,7 +96,7 @@ export class BoardPage extends BasePage {
   }
 
   projectItemByName(name: string): Locator {
-    return this.page.locator('.project-item', { hasText: name });
+    return this.page.locator('.project-item', { hasText: name }).first();
   }
 
   async selectProject(name: string): Promise<void> {
@@ -104,6 +104,19 @@ export class BoardPage extends BasePage {
     await expect(item).toBeVisible();
     await item.click();
     await expect(this.projectTitleHeading).toHaveText(name);
+  }
+
+  async ensureProject(name: string): Promise<void> {
+    // Allow project list to populate from API
+    await this.page.waitForLoadState('networkidle').catch(() => {});
+    await this.page.waitForTimeout(500);
+
+    const item = this.projectItemByName(name);
+    const count = await this.page.locator('.project-item', { hasText: name }).count();
+    if (count === 0) {
+      await this.createProject(name);
+    }
+    await this.selectProject(name);
   }
 
   columnByStatus(status: TaskStatus): Locator {

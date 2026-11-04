@@ -12,8 +12,8 @@ export class LoginPage extends BasePage {
   constructor(page: Page) {
     super(page);
     this.heading = page.getByRole('heading', { name: 'Log in to SprintForge' });
-    this.emailInput = page.getByLabel('Email');
-    this.passwordInput = page.getByLabel('Password');
+    this.emailInput = page.locator('input[type="email"]');
+    this.passwordInput = page.locator('input[type="password"]');
     this.submitButton = page.getByRole('button', { name: 'Log In' });
     this.errorMessage = page.locator('div[style*="de350b"], div[style*="222, 53, 11"]');
     this.signUpLink = page.getByRole('link', { name: 'Sign up' });
