@@ -1,0 +1,63 @@
+name: SprintForge Automated Test Suite
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Headless E2E & API Regression
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+
+    env:
+      BASE_URL: ${{ secrets.BASE_URL || 'https://sprintforge-tracker.vercel.app' }}
+      API_BASE_URL: ${{ secrets.API_BASE_URL || 'https://mern-agile-tracker.onrender.com' }}
+      TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL || 'automation_runner@test.com' }}
+      TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD || 'TestSecret123!' }}
+      CI: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright browser binaries
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright Chromium with system dependencies
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Typecheck TypeScript suite
+        run: npx tsc --noEmit
+
+      - name: Execute Playwright Test Suite
+        run: npm test
+
+      - name: Upload HTML Test Report Artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-test-report
+          path: playwright-report/
+          retention-days: 14
