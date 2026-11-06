@@ -15,7 +15,9 @@ function getAuthToken(): string | null {
   try {
     if (fs.existsSync(authFile)) {
       const data = JSON.parse(fs.readFileSync(authFile, 'utf8'));
-      const tokenItem = data.origins?.[0]?.localStorage?.find((item: { name: string }) => item.name === 'token');
+      const tokenItem = data.origins
+        ?.flatMap((o: { localStorage?: Array<{ name: string; value: string }> }) => o.localStorage || [])
+        ?.find((item: { name: string; value: string }) => item.name === 'token');
       return tokenItem?.value || null;
     }
   } catch {
@@ -29,6 +31,7 @@ test.describe('Task API Contract & Security Suite', () => {
 
   let token: string;
   let testProjectId: string;
+  let emptyProjectId: string;
   let createdTaskId: string;
 
   async function ensureTestTask(request: APIRequestContext): Promise<string> {
@@ -54,7 +57,6 @@ test.describe('Task API Contract & Security Suite', () => {
   }
 
   test.beforeAll(async ({ request }) => {
-    // Retrieve token from session state or authenticate directly
     const storedToken = getAuthToken();
     if (storedToken) {
       token = storedToken;
@@ -69,7 +71,7 @@ test.describe('Task API Contract & Security Suite', () => {
       token = body.token;
     }
 
-    // Create a dedicated project fixture for task contract tests
+    // Fixture project with tasks
     const projectRes = await request.post(`${apiUrl}/api/projects`, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -80,11 +82,25 @@ test.describe('Task API Contract & Security Suite', () => {
         description: 'Fixture project for automated API contract verification',
       },
     });
-
     expect(projectRes.status()).toBe(201);
     const projectBody = await projectRes.json();
     const validatedProject = ProjectSchema.parse(projectBody);
     testProjectId = validatedProject._id;
+
+    // Fixture project without tasks for empty collection boundary tests
+    const emptyProjectRes = await request.post(`${apiUrl}/api/projects`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      data: {
+        name: `Empty Project ${Date.now()}`,
+        description: 'Empty fixture project',
+      },
+    });
+    expect(emptyProjectRes.status()).toBe(201);
+    const emptyProjectBody = await emptyProjectRes.json();
+    emptyProjectId = ProjectSchema.parse(emptyProjectBody)._id;
   });
 
   test.describe('Schema & Contract Adherence', () => {
@@ -107,8 +123,6 @@ test.describe('Task API Contract & Security Suite', () => {
 
       expect(res.status()).toBe(201);
       const body = await res.json();
-
-      // Assert payload strictly conforms to Zod contract
       const task = TaskSchema.parse(body);
       createdTaskId = task._id;
 
@@ -130,13 +144,24 @@ test.describe('Task API Contract & Security Suite', () => {
 
       expect(res.status()).toBe(200);
       const body = await res.json();
-
-      // Assert array adherence to schema
       const taskList = TaskListSchema.parse(body);
       expect(taskList.length).toBeGreaterThanOrEqual(1);
 
       const foundTask = taskList.find((t) => t._id === createdTaskId);
       expect(foundTask).toBeDefined();
+    });
+
+    test('GET /api/tasks/project/:projectId should return empty TaskListSchema array for project with zero tasks', async ({ request }) => {
+      const res = await request.get(`${apiUrl}/api/tasks/project/${emptyProjectId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(res.status()).toBe(200);
+      const body = await res.json();
+      const taskList = TaskListSchema.parse(body);
+      expect(taskList).toEqual([]);
     });
 
     test('PUT /api/tasks/:taskId should update attributes and conform to schema', async ({ request }) => {
@@ -159,12 +184,30 @@ test.describe('Task API Contract & Security Suite', () => {
 
       expect(res.status()).toBe(200);
       const body = await res.json();
-
       const updatedTask = TaskSchema.parse(body);
       expect(updatedTask._id).toBe(taskId);
       expect(updatedTask.title).toBe(updatePayload.title);
       expect(updatedTask.status).toBe('Done');
       expect(updatedTask.priority).toBe('Medium');
+    });
+
+    test('PUT /api/tasks/:taskId should return 400 Validation Error on invalid status enum value', async ({ request }) => {
+      const taskId = await ensureTestTask(request);
+
+      const res = await request.put(`${apiUrl}/api/tasks/${taskId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        data: {
+          status: 'InvalidStatusString',
+        },
+      });
+
+      expect(res.status()).toBe(400);
+      const body = await res.json();
+      const error = ApiErrorSchema.parse(body);
+      expect(error.message).toMatch(/Validation error/i);
     });
 
     test('POST /api/tasks should return 400 Validation Error on missing required fields', async ({ request }) => {
@@ -174,7 +217,6 @@ test.describe('Task API Contract & Security Suite', () => {
           'Content-Type': 'application/json',
         },
         data: {
-          // Missing title and project
           description: 'Malformed payload without required attributes',
         },
       });
@@ -196,7 +238,6 @@ test.describe('Task API Contract & Security Suite', () => {
 
       expect(res.status()).toBe(200);
 
-      // Verify task is no longer returned in project task listing
       const verifyRes = await request.get(`${apiUrl}/api/tasks/project/${testProjectId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -239,6 +280,22 @@ test.describe('Task API Contract & Security Suite', () => {
         data: {
           title: 'Unauthenticated Task',
           project: testProjectId,
+        },
+      });
+
+      expect(res.status()).toBe(401);
+      const body = await res.json();
+      const error = ApiErrorSchema.parse(body);
+      expect(error.message).toMatch(/Unauthorized/i);
+    });
+
+    test('PUT /api/tasks/:taskId should reject unauthenticated update with 401', async ({ request }) => {
+      const res = await request.put(`${apiUrl}/api/tasks/000000000000000000000000`, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        data: {
+          title: 'Unauthorized update attempt',
         },
       });
 
