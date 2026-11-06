@@ -50,11 +50,11 @@ graph TD
 
 ## 2. Framework Highlights
 
-- **Fast Hybrid Authentication**: Bypasses slow repetitive browser UI login sequences across the test suite by executing an API-level authentication request and seeding browser `localStorage` (`token` and `user`), serialized to a reusable `storageState`. Includes an automated UI fallback.
+- **Fast Hybrid Authentication**: Bypasses slow repetitive browser UI login sequences across the test suite by executing an API-level authentication request and seeding browser `localStorage` (`token` and `user`), serialized to a reusable `storageState`. Includes an automated Page Object Model-driven UI fallback.
 - **Semantic Page Object Models (POM)**: Fully encapsulates UI locators and actions using user-facing semantic queries (`getByRole`, `getByPlaceholder`, input types) adhering strictly to the Page Object pattern.
-- **Strict Schema Contract Enforcement**: Implements runtime Zod schema parsing (`TaskSchema`, `ProjectSchema`, `ApiErrorSchema`) against live REST responses, catching API drift and type violations immediately.
-- **Security & Authorization Boundaries**: Verifies endpoint protection by asserting HTTP `401 Unauthorized` responses against unauthenticated requests, forged JWT signatures, and malformed authorization headers.
-- **Robust Deterministic Execution**: Uses isolated test run identifiers and serial execution ordering for CRUD state transitions to guarantee zero test flakiness under parallel execution.
+- **Strict Schema Contract Enforcement**: Implements runtime Zod schema parsing (`TaskSchema`, `ProjectSchema`, `ApiErrorSchema`) against live REST responses, catching API drift, missing attributes, and type violations immediately.
+- **Security & Authorization Boundaries**: Verifies endpoint protection by asserting HTTP `401 Unauthorized` responses against unauthenticated requests across all HTTP verbs (`GET`, `POST`, `PUT`, `DELETE`), forged JWT signatures, and malformed authorization headers.
+- **Robust Deterministic Execution**: Uses isolated test run identifiers and event-driven network hydration for CRUD state transitions to guarantee zero test flakiness under parallel execution.
 
 ---
 
@@ -125,8 +125,17 @@ During the construction and execution of this automation suite against the live 
 * **Severity**: `Low` (UI Loading State Defect)
 * **Observation**: In rapid test executions, project listing checks occasionally encountered zero items before populating half a second later.
 * **Root Cause**: The React sidebar fires `fetch('/api/projects')` inside `useEffect` without displaying an intermediate loading skeleton or disabled placeholder while awaiting the Render backend's response.
-* **Framework Workaround**: `BoardPage.ensureProject` introduces network idle stabilization prior to querying workspace cards.
+* **Framework Workaround**: `BoardPage.goto` registers event-driven `waitForResponse` for `/api/projects` to ensure deterministic DOM hydration prior to executing assertions.
 * **Recommended Product Fix**: Implement a loading state or skeleton loader in the sidebar during project fetch.
+
+---
+
+### Defect 4: Unlinked Status and Priority Dropdown Labels in Task Modal
+* **Severity**: `Medium` (Accessibility Violation)
+* **Observation**: In the task modal, `<label>Status</label>` and `<label>Priority</label>` are disconnected from their underlying `<select>` elements, causing `getByLabel('Status')` to resolve to null.
+* **Root Cause**: Missing `htmlFor` / `id` pairings in the modal's `.form-group` markup.
+* **Engineering Impact**: Form fields fail programmatic label association under WCAG 2.1 AA criteria.
+* **Framework Workaround**: Located selects using container-scoped `.form-group` traversal.
 
 ---
 
