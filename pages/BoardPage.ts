@@ -12,7 +12,6 @@ export interface TaskInput {
 }
 
 export class BoardPage extends BasePage {
-  // Sidebar elements
   readonly sidebar: Locator;
   readonly brandLogo: Locator;
   readonly brandTitle: Locator;
@@ -24,16 +23,13 @@ export class BoardPage extends BasePage {
   readonly projectItems: Locator;
   readonly emptyBoardPrompt: Locator;
 
-  // Board Header & Controls
   readonly projectTitleHeading: Locator;
   readonly newTaskButton: Locator;
   readonly searchInput: Locator;
   readonly priorityFilter: Locator;
 
-  // Kanban Columns
   readonly columns: Locator;
 
-  // Task Modal elements
   readonly modal: Locator;
   readonly modalHeader: Locator;
   readonly taskTitleInput: Locator;
@@ -47,7 +43,6 @@ export class BoardPage extends BasePage {
   constructor(page: Page) {
     super(page);
 
-    // Sidebar
     this.sidebar = page.locator('.sidebar');
     this.brandLogo = page.locator('.sidebar-brand img');
     this.brandTitle = page.locator('.sidebar-brand span');
@@ -59,16 +54,13 @@ export class BoardPage extends BasePage {
     this.projectItems = page.locator('.project-item');
     this.emptyBoardPrompt = page.getByRole('heading', { name: 'Select or create a project to begin' });
 
-    // Board Header
     this.projectTitleHeading = page.locator('.board-header h1');
     this.newTaskButton = page.getByRole('button', { name: /New Task/i });
     this.searchInput = page.getByPlaceholder('Search tasks...');
     this.priorityFilter = page.locator('.priority-filter select');
 
-    // Kanban
     this.columns = page.locator('.column');
 
-    // Modal
     this.modal = page.locator('.modal-content');
     this.modalHeader = page.locator('.modal-header h2');
     this.taskTitleInput = page.getByPlaceholder('e.g. Design homepage hero');
@@ -81,8 +73,17 @@ export class BoardPage extends BasePage {
   }
 
   async goto(): Promise<void> {
+    const projectsResponsePromise = this.page
+      .waitForResponse((res) => res.url().includes('/api/projects'), { timeout: 10000 })
+      .catch(() => null);
+
     await this.navigate('/');
     await expect(this.sidebar).toBeVisible();
+    await projectsResponsePromise;
+  }
+
+  projectItemByName(name: string): Locator {
+    return this.page.locator('.project-item', { hasText: name }).first();
   }
 
   async createProject(name: string): Promise<void> {
@@ -95,10 +96,6 @@ export class BoardPage extends BasePage {
     await expect(this.projectItemByName(name)).toBeVisible();
   }
 
-  projectItemByName(name: string): Locator {
-    return this.page.locator('.project-item', { hasText: name }).first();
-  }
-
   async selectProject(name: string): Promise<void> {
     const item = this.projectItemByName(name);
     await expect(item).toBeVisible();
@@ -107,24 +104,32 @@ export class BoardPage extends BasePage {
   }
 
   async ensureProject(name: string): Promise<void> {
-    // Allow project list to populate from API
-    await this.page.waitForLoadState('networkidle').catch(() => {});
-    await this.page.waitForTimeout(500);
-
     const item = this.projectItemByName(name);
-    const count = await this.page.locator('.project-item', { hasText: name }).count();
-    if (count === 0) {
+    const exists = await item.isVisible().catch(() => false);
+    if (!exists) {
       await this.createProject(name);
     }
     await this.selectProject(name);
   }
 
   columnByStatus(status: TaskStatus): Locator {
-    return this.page.locator('.column', { hasText: status });
+    return this.page.locator('.column').filter({
+      has: this.page.locator('.column-title', { hasText: new RegExp(`^${status}$`, 'i') }),
+    });
+  }
+
+  columnCardCount(status: TaskStatus): Locator {
+    return this.columnByStatus(status).locator('.card-count');
   }
 
   taskCardByTitle(title: string): Locator {
-    return this.page.locator('.task-card', { hasText: title });
+    return this.page.locator('.task-card').filter({
+      has: this.page.locator('.card-title', { hasText: title }),
+    });
+  }
+
+  priorityBadgeForCard(title: string): Locator {
+    return this.taskCardByTitle(title).locator('.priority-badge');
   }
 
   async createTask(input: TaskInput): Promise<void> {
@@ -152,7 +157,7 @@ export class BoardPage extends BasePage {
   }
 
   async openTask(title: string): Promise<void> {
-    const card = this.taskCardByTitle(title);
+    const card = this.taskCardByTitle(title).first();
     await expect(card).toBeVisible();
     await card.click();
     await expect(this.modal).toBeVisible();
@@ -194,11 +199,10 @@ export class BoardPage extends BasePage {
   }
 
   async deleteTask(title: string): Promise<void> {
-    this.page.once('dialog', async (dialog) => {
-      await dialog.accept();
-    });
-
     await this.openTask(title);
+    this.page.once('dialog', (dialog) => {
+      dialog.accept().catch(() => {});
+    });
     await this.deleteTaskButton.click();
     await expect(this.modal).toBeHidden();
     await expect(this.taskCardByTitle(title)).toBeHidden();
