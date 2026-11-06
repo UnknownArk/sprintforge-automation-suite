@@ -15,7 +15,9 @@ export class LoginPage extends BasePage {
     this.emailInput = page.locator('input[type="email"]');
     this.passwordInput = page.locator('input[type="password"]');
     this.submitButton = page.getByRole('button', { name: 'Log In' });
-    this.errorMessage = page.locator('div[style*="de350b"], div[style*="222, 53, 11"]');
+    this.errorMessage = page.locator(
+      'form > div[style*="222, 53, 11"], form > div[style*="de350b"], form > div[style*="255, 235, 230"]'
+    );
     this.signUpLink = page.getByRole('link', { name: 'Sign up' });
   }
 
@@ -32,10 +34,6 @@ export class LoginPage extends BasePage {
 
   async expectErrorMessage(message: string | RegExp): Promise<void> {
     await expect(this.errorMessage).toBeVisible();
-    if (typeof message === 'string') {
-      await expect(this.errorMessage).toContainText(message);
-    } else {
-      await expect(this.errorMessage).toHaveText(message);
-    }
+    await expect(this.errorMessage).toContainText(message);
   }
 }
