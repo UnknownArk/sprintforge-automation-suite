@@ -2,7 +2,6 @@ import { test, expect } from '@playwright/test';
 import { LoginPage } from '../../pages/LoginPage';
 
 test.describe('Authentication Flow', () => {
-  // Clear persistent session state for auth tests so each runs in an unauthenticated context
   test.use({ storageState: { cookies: [], origins: [] } });
 
   let loginPage: LoginPage;
@@ -18,6 +17,12 @@ test.describe('Authentication Flow', () => {
     await expect(loginPage.passwordInput).toBeVisible();
     await expect(loginPage.submitButton).toBeVisible();
     await expect(loginPage.signUpLink).toBeVisible();
+  });
+
+  test('should enforce HTML5 required validation on empty credentials submission', async () => {
+    await loginPage.submitButton.click();
+    const isEmailValid = await loginPage.emailInput.evaluate((el: HTMLInputElement) => el.checkValidity());
+    expect(isEmailValid).toBe(false);
   });
 
   test('should display error message on invalid credentials', async () => {

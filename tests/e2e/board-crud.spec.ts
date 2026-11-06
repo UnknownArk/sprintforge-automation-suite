@@ -2,11 +2,10 @@ import { test, expect } from '@playwright/test';
 import { BoardPage } from '../../pages/BoardPage';
 
 test.describe('Board & Task Lifecycle Management', () => {
-  // Serial mode guarantees deterministic execution of the full CRUD lifecycle
   test.describe.configure({ mode: 'serial' });
 
   let boardPage: BoardPage;
-  const testRunId = Date.now().toString().slice(-5);
+  const testRunId = `${Date.now().toString().slice(-4)}${Math.floor(Math.random() * 1000)}`;
   const projectName = `Platform Sprint ${testRunId}`;
   const taskTitle = `Telemetry Ingest ${testRunId}`;
   const updatedTitle = `Telemetry Ingest ${testRunId} (Optimized)`;
@@ -25,6 +24,26 @@ test.describe('Board & Task Lifecycle Management', () => {
     await expect(boardPage.columnByStatus('Done')).toBeVisible();
   });
 
+  test('should enforce form validation in task creation modal', async () => {
+    await boardPage.ensureProject(projectName);
+    await boardPage.newTaskButton.click();
+    await expect(boardPage.modal).toBeVisible();
+
+    // Verify Save Task is disabled when title is empty
+    await expect(boardPage.saveTaskButton).toBeDisabled();
+
+    // Entering a title enables the submit action
+    await boardPage.taskTitleInput.fill('Temporary Title Validation');
+    await expect(boardPage.saveTaskButton).toBeEnabled();
+
+    // Clearing title disables it again
+    await boardPage.taskTitleInput.fill('');
+    await expect(boardPage.saveTaskButton).toBeDisabled();
+
+    await boardPage.cancelModalButton.click();
+    await expect(boardPage.modal).toBeHidden();
+  });
+
   test('should create a new task and display it under To Do column', async () => {
     await boardPage.ensureProject(projectName);
 
@@ -39,34 +58,28 @@ test.describe('Board & Task Lifecycle Management', () => {
     await expect(card).toBeVisible();
 
     const toDoColumn = boardPage.columnByStatus('To Do');
-    await expect(toDoColumn.locator('.task-card', { hasText: taskTitle })).toBeVisible();
-    await expect(card.locator('.badge, span')).toContainText('High');
+    await expect(toDoColumn.locator('.task-card').filter({ hasText: taskTitle })).toBeVisible();
+    await expect(boardPage.priorityBadgeForCard(taskTitle)).toHaveText('High');
   });
 
   test('should search and filter tasks by title and priority', async () => {
     await boardPage.ensureProject(projectName);
 
-    // Filter by matching search query
     await boardPage.searchTasks(taskTitle);
     await expect(boardPage.taskCardByTitle(taskTitle)).toBeVisible();
 
-    // Filter by non-matching query
     await boardPage.searchTasks('Nonexistent-Task-Random-Query-12345');
     await expect(boardPage.taskCardByTitle(taskTitle)).toBeHidden();
 
-    // Reset search
     await boardPage.searchTasks('');
     await expect(boardPage.taskCardByTitle(taskTitle)).toBeVisible();
 
-    // Filter by High priority
     await boardPage.filterByPriority('High');
     await expect(boardPage.taskCardByTitle(taskTitle)).toBeVisible();
 
-    // Filter by Low priority (card is High, so should hide)
     await boardPage.filterByPriority('Low');
     await expect(boardPage.taskCardByTitle(taskTitle)).toBeHidden();
 
-    // Reset priority filter
     await boardPage.filterByPriority('All');
     await expect(boardPage.taskCardByTitle(taskTitle)).toBeVisible();
   });
@@ -81,12 +94,12 @@ test.describe('Board & Task Lifecycle Management', () => {
       description: 'Updated pipeline spec with backpressure metrics',
     });
 
-    // Verify card moved from To Do to In Progress
     const inProgressColumn = boardPage.columnByStatus('In Progress');
-    await expect(inProgressColumn.locator('.task-card', { hasText: updatedTitle })).toBeVisible();
+    await expect(inProgressColumn.locator('.task-card').filter({ hasText: updatedTitle })).toBeVisible();
 
     const toDoColumn = boardPage.columnByStatus('To Do');
-    await expect(toDoColumn.locator('.task-card', { hasText: updatedTitle })).toBeHidden();
+    await expect(toDoColumn.locator('.task-card').filter({ hasText: updatedTitle })).toBeHidden();
+    await expect(boardPage.priorityBadgeForCard(updatedTitle)).toHaveText('Medium');
   });
 
   test('should delete task and confirm removal from board', async () => {
